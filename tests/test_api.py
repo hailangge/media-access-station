@@ -67,6 +67,8 @@ def test_import_flow(tmp_path: Path) -> None:
         'overwrite': True,
     })
     assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'success'
     target = Path(config.nas.import_root) / 'recorder-drop' / 'meeting.wav'
     assert target.exists()
 
@@ -86,6 +88,111 @@ def test_write_back_blocked_by_default(tmp_path: Path) -> None:
     assert 'disabled' in response.json()['detail']
 
 
+def test_import_single_file_to_dotted_subdir(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/import', headers=auth_headers(), json={
+        'request_id': 'req-import-dot',
+        'task_type': 'import_to_nas',
+        'mode': 'read_only',
+        'device_id': 'test-recorder',
+        'source_path': 'Recordings/meeting.wav',
+        'destination_subdir': 'archive.v2',
+        'overwrite': True,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'success'
+    target = Path(config.nas.import_root) / 'archive.v2' / 'meeting.wav'
+    assert target.exists()
+    assert target.read_text(encoding='utf-8') == 'recording'
+
+
+def test_import_partial_when_existing_file_skipped(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    source_dir = Path(config.devices.mount_root) / 'test-recorder' / 'Batch'
+    source_dir.mkdir(parents=True)
+    (source_dir / 'file1.txt').write_text('one', encoding='utf-8')
+    (source_dir / 'file2.txt').write_text('two', encoding='utf-8')
+    dest_dir = Path(config.nas.import_root) / 'batch-drop'
+    dest_dir.mkdir(parents=True)
+    (dest_dir / 'file1.txt').write_text('existing', encoding='utf-8')
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/import', headers=auth_headers(), json={
+        'request_id': 'req-import-partial',
+        'task_type': 'import_to_nas',
+        'mode': 'read_only',
+        'device_id': 'test-recorder',
+        'source_path': 'Batch',
+        'destination_subdir': 'batch-drop',
+        'overwrite': False,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'partial'
+    assert any('Skipped existing file' in w for w in body['warnings'])
+    assert (dest_dir / 'file2.txt').exists()
+
+
+def test_import_failed_when_all_existing_files_skipped(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    dest_dir = Path(config.nas.import_root) / 'recorder-drop'
+    dest_dir.mkdir(parents=True)
+    (dest_dir / 'meeting.wav').write_text('existing', encoding='utf-8')
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/import', headers=auth_headers(), json={
+        'request_id': 'req-import-failed',
+        'task_type': 'import_to_nas',
+        'mode': 'read_only',
+        'device_id': 'test-recorder',
+        'source_path': 'Recordings/meeting.wav',
+        'destination_subdir': 'recorder-drop',
+        'overwrite': False,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'failed'
+    assert any('Skipped existing file' in w for w in body['warnings'])
+
+
+def test_write_back_partial_when_some_targets_unsupported(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-partial',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music', 'Music/song.mp3'],
+        'action': 'write_lrc_sidecar',
+        'payload': {'content': 'lyric line'},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'partial'
+    assert any('Skipped directory target' in w for w in body['warnings'])
+    sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'song.lrc'
+    assert sidecar.read_text(encoding='utf-8') == 'lyric line'
+
+
+def test_write_back_failed_when_all_targets_unsupported(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-failed',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music'],
+        'action': 'write_lrc_sidecar',
+        'payload': {'content': 'lyric line'},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'failed'
+    assert any('Skipped directory target' in w for w in body['warnings'])
+
+
 def test_write_back_success_when_enabled(tmp_path: Path) -> None:
     config = make_config(tmp_path, write_enabled=True)
     client = TestClient(create_app(config))
@@ -99,5 +206,7 @@ def test_write_back_success_when_enabled(tmp_path: Path) -> None:
         'payload': {'content': 'lyric line'},
     })
     assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'success'
     sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'song.lrc'
     assert sidecar.read_text(encoding='utf-8') == 'lyric line'

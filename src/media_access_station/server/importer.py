@@ -50,9 +50,8 @@ def execute_import(request: ImportRequest, config: ServerConfig) -> tuple[dict, 
                 shutil.copy2(item, target)
                 changed.append({"source": str(item), "destination": str(target), "bytes": target.stat().st_size})
         else:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            final_target = destination if destination.suffix else destination / source.name
-            final_target.parent.mkdir(parents=True, exist_ok=True)
+            destination.mkdir(parents=True, exist_ok=True)
+            final_target = destination / source.name
             if final_target.exists() and not request.overwrite:
                 warnings.append(f"Skipped existing file: {final_target}")
             else:

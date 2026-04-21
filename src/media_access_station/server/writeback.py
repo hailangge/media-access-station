@@ -25,6 +25,9 @@ def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[
 
     for target_file in request.target_files:
         target = ensure_within_root(root, root / target_file)
+        if target.is_dir():
+            warnings.append(f"Skipped directory target: {target}")
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         if request.action == "write_lrc_sidecar":
             sidecar = target.with_suffix('.lrc')

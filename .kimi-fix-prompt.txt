@@ -1,0 +1,21 @@
+You are working in repo /mnt/data/repositories/media-access-station.
+
+Follow requirements.md, design.md, and tasks.md exactly. Update tasks.md as milestones complete.
+
+Task:
+1. Fix src/media_access_station/server/importer.py so single-file imports always treat destination_subdir as a destination directory, even when it contains dots like archive.v2.
+2. Fix src/media_access_station/server/service.py and any supporting schema/util code so import and write-back statuses clearly distinguish success, partial, and failed, instead of always returning success.
+3. Add/adjust automated tests to cover:
+   - dotted destination_subdir regression
+   - import partial/warning status
+   - write-back partial status
+   - write-back failed status
+4. Optionally fix only low-risk adjacent issues that naturally fall out of this change, but do not broaden scope.
+5. Run relevant tests you can run locally and summarize exact commands/results.
+6. Do not claim completion until tests succeed.
+7. Keep changes inside this repository and summarize files changed.
+
+Important:
+- This is implementation work, not just a report.
+- Update tasks.md live as you progress.
+- Be concise in terminal output, but leave enough evidence in transcript/logs.

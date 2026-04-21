@@ -1,18 +1,17 @@
 # Tasks
 
 ## In progress
-- [x] Confirm scope from provided requirement documents
-- [x] Write executable `requirements.md`
-- [x] Write executable `design.md`
-- [x] Write live `tasks.md`
-- [x] Implement shared schemas and config loading
-- [x] Implement Pi-side FastAPI service
-- [x] Implement local CLI client and operation-log persistence
-- [x] Add README and sample config
-- [x] Run tests and smoke validation
-- [x] Final review and commit
+- [x] Confirm audit findings and target repo state
+- [x] Refresh `requirements.md`, `design.md`, and `tasks.md` for the fix round
+- [x] Launch persistent Kimi session for implementation
+- [x] Fix dotted `destination_subdir` handling for single-file import
+- [x] Refactor import/write-back status semantics to `success` / `partial` / `failed`
+- [x] Add regression tests for dotted destination and status outcomes
+- [x] Run full `pytest`
+- [x] Run CLI/API smoke checks
+- [x] Final review, commit, and collect Kimi evidence
 
 ## Notes
-- Transport choice for MVP: authenticated HTTP/JSON, with rsync-related config reserved for import transport execution.
-- Hardware-dependent device discovery uses filesystem scanning plus mock fallback when real removable devices are absent.
-- Authoritative task history remains local under `var/operation-logs/`.
+- Scope is limited to the two confirmed major findings plus low-risk adjacent cleanup only.
+- Need preserved Kimi CLI evidence for the implementation workflow.
+- Repo had pre-existing review artifacts under `review/` and a modified `tasks.md`; this round supersedes the task tracker with the repair checklist above.

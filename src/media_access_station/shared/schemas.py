@@ -8,7 +8,7 @@ from media_access_station.shared.utils import utc_now
 TaskType = Literal["health_check", "scan", "import_to_nas", "write_back"]
 ModeType = Literal["read_only", "write"]
 WriteActionType = Literal["write_lrc_sidecar", "write_metadata_sidecar"]
-StatusType = Literal["success", "error", "blocked"]
+StatusType = Literal["success", "partial", "failed"]
 
 
 class RequestBase(BaseModel):
