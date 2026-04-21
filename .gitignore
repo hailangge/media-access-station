@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+var/operation-logs/
+var/nas-import/
+var/tmp/
+var/service-logs/

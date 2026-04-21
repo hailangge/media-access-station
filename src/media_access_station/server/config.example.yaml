@@ -1,0 +1,29 @@
+server:
+  host: 127.0.0.1
+  port: 8765
+security:
+  auth_token: change-me
+  client_ip_allowlist:
+    - 127.0.0.1
+    - testclient
+  write_enabled: false
+nas:
+  address: nas.local
+  import_root: ./var/nas-import
+transport:
+  public_key_name: media-access-station-main
+  method: local_copy
+  rsync:
+    command: rsync
+    ssh_user: pi
+    ssh_port: 22
+    extra_args:
+      - -a
+      - --info=progress2
+devices:
+  scan_roots:
+    - ./fixtures/devices
+  mount_root: ./fixtures/devices
+operations:
+  service_log_dir: ./var/service-logs
+  temp_dir: ./var/tmp
