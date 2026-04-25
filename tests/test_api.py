@@ -210,3 +210,44 @@ def test_write_back_success_when_enabled(tmp_path: Path) -> None:
     assert body['status'] == 'success'
     sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'song.lrc'
     assert sidecar.read_text(encoding='utf-8') == 'lyric line'
+
+
+def test_write_back_failed_when_target_file_missing(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-missing',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/missing.mp3'],
+        'action': 'write_lrc_sidecar',
+        'payload': {'content': 'lyric line'},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'failed'
+    assert any('Skipped missing target file' in w for w in body['warnings'])
+    sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'missing.lrc'
+    assert not sidecar.exists()
+
+
+def test_write_back_dry_run_does_not_create_parent_dirs(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-dry-run',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['NewFolder/song.mp3'],
+        'action': 'write_metadata_sidecar',
+        'dry_run': True,
+        'payload': {'metadata': {'title': 'demo'}},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'failed'
+    assert any('Skipped missing target file' in w for w in body['warnings'])
+    new_dir = Path(config.devices.mount_root) / 'test-player' / 'NewFolder'
+    assert not new_dir.exists()

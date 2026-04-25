@@ -25,15 +25,18 @@ def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[
 
     for target_file in request.target_files:
         target = ensure_within_root(root, root / target_file)
+        if not target.exists():
+            warnings.append(f"Skipped missing target file: {target}")
+            continue
         if target.is_dir():
             warnings.append(f"Skipped directory target: {target}")
             continue
-        target.parent.mkdir(parents=True, exist_ok=True)
         if request.action == "write_lrc_sidecar":
             sidecar = target.with_suffix('.lrc')
             if request.dry_run:
                 changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action, "dry_run": True})
                 continue
+            sidecar.parent.mkdir(parents=True, exist_ok=True)
             sidecar.write_text(request.payload.content or "", encoding='utf-8')
             changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action})
         elif request.action == "write_metadata_sidecar":
@@ -41,6 +44,7 @@ def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[
             if request.dry_run:
                 changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action, "dry_run": True})
                 continue
+            sidecar.parent.mkdir(parents=True, exist_ok=True)
             sidecar.write_text(json.dumps(request.payload.metadata, ensure_ascii=False, indent=2), encoding='utf-8')
             changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action})
         else:
