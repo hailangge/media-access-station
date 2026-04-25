@@ -11,6 +11,8 @@ from media_access_station.server.writeback import execute_writeback
 def handle_scan(request: ScanRequest, config: ServerConfig) -> ResponseEnvelope:
     started = utc_now()
     devices, warnings = scan_devices(config, request.scan_roots, request.include_hidden)
+    if request.dry_run:
+        warnings = [*warnings, "Scan is non-destructive; dry_run had no additional effect"]
     operation_log = OperationLog(
         request_id=request.request_id,
         task_type=request.task_type,
@@ -18,7 +20,7 @@ def handle_scan(request: ScanRequest, config: ServerConfig) -> ResponseEnvelope:
         target_paths=[device.path for device in devices],
         actions=["scan_devices"],
         warnings=warnings,
-        details={"device_count": len(devices)},
+        details={"device_count": len(devices), "dry_run": request.dry_run},
     )
     return ResponseEnvelope(
         request_id=request.request_id,
@@ -27,7 +29,7 @@ def handle_scan(request: ScanRequest, config: ServerConfig) -> ResponseEnvelope:
         completed_at=utc_now(),
         summary=f"Scanned {len(devices)} device(s)",
         warnings=warnings,
-        result={"devices": [device.model_dump() for device in devices]},
+        result={"devices": [device.model_dump() for device in devices], "dry_run": request.dry_run},
         operation_log=operation_log,
     )
 

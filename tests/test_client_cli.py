@@ -43,3 +43,12 @@ def test_health_cli_outputs_json(monkeypatch) -> None:
     result = runner.invoke(app, ['health', '--token', 'x'])
     assert result.exit_code == 0
     assert '"status": "ok"' in result.stdout
+
+
+def test_health_cli_persists_operation_log(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr('media_access_station.client.cli._client', lambda base_url, token: StubClient({}))
+    runner = CliRunner()
+    result = runner.invoke(app, ['health', '--token', 'x', '--log-root', str(tmp_path)])
+    assert result.exit_code == 0
+    assert '"log_path":' in result.stdout
+    assert any(tmp_path.rglob('*.json'))

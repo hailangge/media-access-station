@@ -1,9 +1,24 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 from media_access_station.shared.config import ServerConfig
 from media_access_station.shared.schemas import DeviceRecord
+
+
+def _detect_filesystem(path: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["stat", "-f", "-c", "%T", str(path)],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return "localfs"
+    filesystem = result.stdout.strip()
+    return filesystem or "localfs"
 
 
 def scan_devices(config: ServerConfig, requested_roots: list[str] | None = None, include_hidden: bool = False) -> tuple[list[DeviceRecord], list[str]]:
@@ -27,6 +42,7 @@ def scan_devices(config: ServerConfig, requested_roots: list[str] | None = None,
                     device_id=entry.name,
                     path=str(entry.resolve()),
                     label=entry.name,
+                    filesystem=_detect_filesystem(entry),
                     mock=False,
                     files_sample=sample,
                 )

@@ -1,3 +1,5 @@
+# Production recommendation: prefer absolute paths for all filesystem settings.
+# Relative paths resolve from the server process working directory.
 server:
   host: 127.0.0.1
   port: 8765

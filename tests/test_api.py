@@ -52,6 +52,22 @@ def test_health_and_scan(tmp_path: Path) -> None:
     body = scan.json()
     assert body['status'] == 'success'
     assert len(body['result']['devices']) == 2
+    assert all(device['filesystem'] != 'mockfs' for device in body['result']['devices'])
+
+
+def test_scan_dry_run_reports_no_effect_warning(tmp_path: Path) -> None:
+    client = TestClient(create_app(make_config(tmp_path)))
+    scan = client.post('/api/v1/scan', headers=auth_headers(), json={
+        'request_id': 'req-scan-dry-run',
+        'task_type': 'scan',
+        'mode': 'read_only',
+        'dry_run': True,
+    })
+    assert scan.status_code == 200
+    body = scan.json()
+    assert body['status'] == 'success'
+    assert body['result']['dry_run'] is True
+    assert any('dry_run had no additional effect' in warning for warning in body['warnings'])
 
 
 def test_import_flow(tmp_path: Path) -> None:
@@ -85,7 +101,23 @@ def test_write_back_blocked_by_default(tmp_path: Path) -> None:
         'payload': {'content': 'lyric line'},
     })
     assert response.status_code == 403
-    assert 'disabled' in response.json()['detail']
+    assert 'disabled in config' in response.json()['detail']
+
+
+def test_invalid_auth_token_rejected(tmp_path: Path) -> None:
+    client = TestClient(create_app(make_config(tmp_path)))
+    response = client.get('/health', headers={'Authorization': 'Bearer wrong-token'})
+    assert response.status_code == 401
+    assert response.json()['detail'] == 'Invalid token'
+
+
+def test_client_ip_not_allowlisted(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config.security.client_ip_allowlist = ['127.0.0.1']
+    client = TestClient(create_app(config))
+    response = client.get('/health', headers=auth_headers())
+    assert response.status_code == 403
+    assert 'not allowed' in response.json()['detail']
 
 
 def test_import_single_file_to_dotted_subdir(tmp_path: Path) -> None:
@@ -251,3 +283,55 @@ def test_write_back_dry_run_does_not_create_parent_dirs(tmp_path: Path) -> None:
     assert any('Skipped missing target file' in w for w in body['warnings'])
     new_dir = Path(config.devices.mount_root) / 'test-player' / 'NewFolder'
     assert not new_dir.exists()
+
+
+def test_write_back_dry_run_existing_target_reports_success_without_sidecar(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-dry-run-existing',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/song.mp3'],
+        'action': 'write_metadata_sidecar',
+        'dry_run': True,
+        'payload': {'metadata': {'title': 'demo'}},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'success'
+    sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'song.mp3.meta.json'
+    assert not sidecar.exists()
+
+
+def test_import_path_traversal_blocked(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/import', headers=auth_headers(), json={
+        'request_id': 'req-import-traversal',
+        'task_type': 'import_to_nas',
+        'mode': 'read_only',
+        'device_id': 'test-recorder',
+        'source_path': '../test-player/Music/song.mp3',
+        'destination_subdir': 'escape',
+        'overwrite': True,
+    })
+    assert response.status_code == 400
+    assert 'escapes root' in response.json()['detail']
+
+
+def test_write_back_path_traversal_blocked(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-traversal',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['../test-recorder/Recordings/meeting.wav'],
+        'action': 'write_lrc_sidecar',
+        'payload': {'content': 'blocked'},
+    })
+    assert response.status_code == 400
+    assert 'escapes root' in response.json()['detail']

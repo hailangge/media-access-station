@@ -38,6 +38,8 @@ pip install -e '.[dev]'
 mas-server --config src/media_access_station/server/config.example.yaml
 ```
 
+Production note: prefer absolute filesystem paths in the server config. Relative paths like `./fixtures/devices` and `./var/nas-import` resolve from the server process working directory.
+
 ## Run client examples
 ```bash
 mas-client health --token change-me
@@ -60,6 +62,7 @@ Client logs are written under:
 var/operation-logs/YYYY/MM/DD/<request_id>.json
 ```
 Each entry contains the endpoint, request payload, response payload, and local persistence timestamp.
+This now includes `health` requests as well as `scan`, `import`, and `write-back`.
 
 ## Test
 ```bash

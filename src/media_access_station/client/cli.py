@@ -30,10 +30,12 @@ def _persist(log_root: str, endpoint: str, request_payload: dict, response_paylo
 def health(
     base_url: str = typer.Option("http://127.0.0.1:8765"),
     token: str = typer.Option("change-me"),
+    log_root: str = typer.Option("./var/operation-logs"),
 ) -> None:
     payload = HealthRequest(request_id=new_request_id()).model_dump()
     response = _client(base_url, token).health()
-    typer.echo(json.dumps({"request": payload, "response": response}, ensure_ascii=False, indent=2))
+    log_path = _persist(log_root, "/health", payload, response)
+    typer.echo(json.dumps({"request": payload, "response": response, "log_path": str(log_path)}, ensure_ascii=False, indent=2))
 
 
 @app.command("scan")

@@ -17,3 +17,4 @@
 - Repo had pre-existing review artifacts under `review/` and a modified `tasks.md`; this round supersedes the task tracker with the repair checklist above.
 - 2026-04-25 verification hardening found an extra write-back flaw: missing target files were incorrectly treated as successful writes, and `dry_run` could still create parent directories. Fixed with regression coverage before Orange Pi validation.
 - 2026-04-25 end-to-end validation executed against Orange Pi `192.168.0.160` using virtual USB-style mount folders plus downloaded MP3/WAV/MP4/JPG sample assets.
+- 2026-04-25 remaining review minors were closed: real device filesystem labeling, clearer write-disabled messaging, persisted `health` logs, explicit `scan --dry-run` semantics, automated auth/IP/path-traversal coverage, and production path guidance.

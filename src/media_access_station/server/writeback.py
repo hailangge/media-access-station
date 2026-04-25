@@ -15,7 +15,7 @@ def _resolve_device_root(config: ServerConfig, device_id: str) -> Path:
 
 def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[dict, list[str], list[dict]]:
     if not config.security.write_enabled:
-        raise PermissionError("Server write operations are disabled by default")
+        raise PermissionError("Server write operations are disabled in config")
     if request.mode != "write":
         raise PermissionError("Request mode must be 'write' for write-back")
 
