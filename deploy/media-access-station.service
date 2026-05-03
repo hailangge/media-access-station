@@ -1,0 +1,18 @@
+[Unit]
+Description=Media Access Station API service
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/media-access-station/current
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/media-access-station/current/.venv/bin/mas-server --config /etc/media-access-station/config.yaml
+Restart=always
+RestartSec=3
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

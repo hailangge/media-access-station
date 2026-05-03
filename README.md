@@ -40,6 +40,15 @@ mas-server --config src/media_access_station/server/config.example.yaml
 
 Production note: prefer absolute filesystem paths in the server config. Relative paths like `./fixtures/devices` and `./var/nas-import` resolve from the server process working directory.
 
+## Deploy on Orange Pi
+- Production config template: `deploy/config.orange-pi.yaml`
+- `systemd` unit template: `deploy/media-access-station.service`
+- Recommended runtime paths:
+  - app: `/opt/media-access-station/current`
+  - config: `/etc/media-access-station/config.yaml`
+  - data root: `/var/lib/media-access-station`
+- The provided unit enables boot-time startup and crash restart via `Restart=always`.
+
 ## Run client examples
 ```bash
 mas-client health --token change-me
