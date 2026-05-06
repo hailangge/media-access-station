@@ -13,6 +13,7 @@ Minimal runnable MVP of a Media Access Station with:
 - `src/media_access_station/server/`: Pi-side service
 - `src/media_access_station/client/`: local host CLI
 - `src/media_access_station/shared/`: schemas, config, helpers
+- `skill/media-access-station/`: skill packaging with script entrypoints for runtime, deployment, and validation
 - `src/media_access_station/server/config.example.yaml`: sample server config
 - `fixtures/devices/`: local mock devices for validation
 - `var/operation-logs/`: local authoritative request logs written by the client
@@ -58,6 +59,27 @@ mas-client write-back test-player Music/song.mp3 --action write_lrc_sidecar --co
 ```
 
 Note: write-back will be blocked until `security.write_enabled` is set to `true` in the config.
+
+## Skill entrypoints
+The root `skill/` folder exposes the Media Access Station feature surface through scripts:
+
+```bash
+skill/media-access-station/scripts/health --token change-me
+skill/media-access-station/scripts/scan --token change-me
+skill/media-access-station/scripts/import-to-nas test-recorder Recordings imported/recorder --token change-me
+skill/media-access-station/scripts/write-back test-player Music/song.mp3 --action write_lrc_sidecar --content 'demo lyric' --token change-me
+skill/media-access-station/scripts/deploy-orange-pi --host 192.168.0.160 --user root --token stage1-token --admin-ip 192.168.0.136
+skill/media-access-station/scripts/validate-orange-pi --host 192.168.0.160 --user root --token stage1-token
+```
+
+These wrappers call `skill/media-access-station/scripts/mas_skill.py`, which exposes:
+- `server`
+- `health`
+- `scan`
+- `import-to-nas`
+- `write-back`
+- `deploy-orange-pi`
+- `validate-orange-pi`
 
 ## API endpoints
 - `GET /health`

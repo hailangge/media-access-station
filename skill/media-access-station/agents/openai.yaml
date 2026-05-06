@@ -1,0 +1,7 @@
+interface:
+  display_name: "Media Access Station"
+  short_description: "Operate, deploy, and validate MAS"
+  default_prompt: "Use $media-access-station to operate or validate the Media Access Station service through its script entrypoints."
+
+policy:
+  allow_implicit_invocation: true

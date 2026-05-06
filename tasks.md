@@ -9,6 +9,7 @@
 - [x] Add regression tests for dotted destination and status outcomes
 - [x] Run full `pytest`
 - [x] Run CLI/API smoke checks
+- [x] Package Media Access Station entrypoints as root-level skill scripts
 - [x] Final review, commit, and collect Kimi evidence
 
 ## Notes
@@ -19,3 +20,4 @@
 - 2026-04-25 end-to-end validation executed against Orange Pi `192.168.0.160` using virtual USB-style mount folders plus downloaded MP3/WAV/MP4/JPG sample assets.
 - 2026-04-25 remaining review minors were closed: real device filesystem labeling, clearer write-disabled messaging, persisted `health` logs, explicit `scan --dry-run` semantics, automated auth/IP/path-traversal coverage, and production path guidance.
 - 2026-05-03 deployment follow-up requires a formal Orange Pi runtime layout, production config, `systemd` boot startup, and crash auto-restart validation on `192.168.0.160`.
+- 2026-05-06 added `skill/media-access-station/` so all current service capabilities are reachable through script-based skill entrypoints.
