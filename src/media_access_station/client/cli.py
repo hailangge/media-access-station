@@ -12,6 +12,7 @@ from media_access_station.shared.schemas import HealthRequest, ImportRequest, Sc
 from media_access_station.shared.utils import new_request_id
 
 app = typer.Typer(help="Media Access Station local client")
+DEFAULT_LOG_ROOT = "/mnt/data/workspace-media-manager/logs/media-access-station"
 
 
 def _client(base_url: str, token: str) -> MASClient:
@@ -30,7 +31,7 @@ def _persist(log_root: str, endpoint: str, request_payload: dict, response_paylo
 def health(
     base_url: str = typer.Option("http://127.0.0.1:8765"),
     token: str = typer.Option("change-me"),
-    log_root: str = typer.Option("./var/operation-logs"),
+    log_root: str = typer.Option(DEFAULT_LOG_ROOT),
 ) -> None:
     payload = HealthRequest(request_id=new_request_id()).model_dump()
     response = _client(base_url, token).health()
@@ -42,7 +43,7 @@ def health(
 def scan_cmd(
     base_url: str = typer.Option("http://127.0.0.1:8765"),
     token: str = typer.Option("change-me"),
-    log_root: str = typer.Option("./var/operation-logs"),
+    log_root: str = typer.Option(DEFAULT_LOG_ROOT),
     scan_root: Optional[str] = typer.Option(None),
     include_hidden: bool = typer.Option(False),
     dry_run: bool = typer.Option(False),
@@ -65,7 +66,7 @@ def import_cmd(
     destination_subdir: str = typer.Argument(...),
     base_url: str = typer.Option("http://127.0.0.1:8765"),
     token: str = typer.Option("change-me"),
-    log_root: str = typer.Option("./var/operation-logs"),
+    log_root: str = typer.Option(DEFAULT_LOG_ROOT),
     dry_run: bool = typer.Option(False),
     overwrite: bool = typer.Option(False),
 ) -> None:
@@ -86,12 +87,12 @@ def import_cmd(
 def write_back_cmd(
     device_id: str = typer.Argument(...),
     target_file: list[str] = typer.Argument(...),
-    action: str = typer.Option(..., help="write_lrc_sidecar or write_metadata_sidecar"),
+    action: str = typer.Option(..., help="write_lrc_sidecar, write_metadata_sidecar, or write_audio_tags"),
     content: Optional[str] = typer.Option(None),
     metadata_json: Optional[str] = typer.Option(None),
     base_url: str = typer.Option("http://127.0.0.1:8765"),
     token: str = typer.Option("change-me"),
-    log_root: str = typer.Option("./var/operation-logs"),
+    log_root: str = typer.Option(DEFAULT_LOG_ROOT),
     dry_run: bool = typer.Option(False),
 ) -> None:
     metadata = json.loads(metadata_json) if metadata_json else {}

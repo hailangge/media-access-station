@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 
 
 def utc_now() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def ensure_within_root(root: Path, candidate: Path) -> Path:

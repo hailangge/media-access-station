@@ -26,7 +26,7 @@ from media_access_station.shared.schemas import HealthRequest, ImportRequest, Sc
 from media_access_station.shared.utils import new_request_id
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
-DEFAULT_LOG_ROOT = "./var/operation-logs"
+DEFAULT_LOG_ROOT = "/mnt/data/workspace-media-manager/logs/media-access-station"
 DEFAULT_REMOTE_HOST = "192.168.0.160"
 DEFAULT_REMOTE_USER = "root"
 DEFAULT_REMOTE_PORT = 8765
@@ -131,6 +131,8 @@ def _rsync_repo(host: str, user: str, password: str, remote_app_dir: str) -> Non
         "--exclude",
         ".venv-review",
         "--exclude",
+        ".venv",
+        "--exclude",
         "__pycache__",
         "--exclude",
         "var/operation-logs",
@@ -147,6 +149,21 @@ def _rsync_repo(host: str, user: str, password: str, remote_app_dir: str) -> Non
 def _remote_python(host: str, user: str, password: str, script: str) -> subprocess.CompletedProcess[str]:
     command = "python3 - <<'PY'\n" + script + "\nPY"
     return _ssh(host, user, password, command, capture_output=True)
+
+
+def _wait_remote_health(host: str, user: str, password: str, token: str, port: int, timeout_seconds: int = 60) -> dict[str, Any]:
+    command = (
+        "for i in $(seq 1 "
+        + str(timeout_seconds)
+        + "); do "
+        + "resp=$(curl -fsS -H "
+        + shlex.quote(f"Authorization: Bearer {token}")
+        + f" http://127.0.0.1:{port}/health 2>/dev/null) && echo \"$resp\" && exit 0; "
+        + "sleep 1; "
+        + "done; exit 1"
+    )
+    output = _ssh(host, user, password, command, capture_output=True).stdout.strip()
+    return json.loads(output)
 
 
 def _http_request(method: str, base_url: str, token: str, path: str, payload: dict[str, Any] | None = None) -> httpx.Response:
@@ -293,9 +310,11 @@ def run_deploy_orange_pi(args: argparse.Namespace) -> None:
             args.user,
             password,
             (
+                "systemctl stop media-access-station.service || true && "
+                f"rm -rf {shlex.quote(args.remote_app_dir)}/.venv && "
                 f"python3 -m venv {shlex.quote(args.remote_app_dir)}/.venv && "
-                f"{shlex.quote(args.remote_app_dir)}/.venv/bin/pip install --upgrade pip && "
-                f"{shlex.quote(args.remote_app_dir)}/.venv/bin/pip install -e {shlex.quote(args.remote_app_dir)} && "
+                f"{shlex.quote(args.remote_app_dir)}/.venv/bin/pip install --upgrade pip setuptools wheel && "
+                f"{shlex.quote(args.remote_app_dir)}/.venv/bin/pip install --no-build-isolation -e {shlex.quote(args.remote_app_dir)} && "
                 "systemctl daemon-reload && "
                 "systemctl enable media-access-station.service && "
                 "systemctl restart media-access-station.service"
@@ -303,22 +322,12 @@ def run_deploy_orange_pi(args: argparse.Namespace) -> None:
         )
         enabled = _ssh(args.host, args.user, password, "systemctl is-enabled media-access-station.service", capture_output=True).stdout.strip()
         active = _ssh(args.host, args.user, password, "systemctl is-active media-access-station.service", capture_output=True).stdout.strip()
-        remote_health = _ssh(
-            args.host,
-            args.user,
-            password,
-            (
-                "curl -fsS -H "
-                + shlex.quote(f"Authorization: Bearer {args.token}")
-                + f" http://127.0.0.1:{args.port}/health"
-            ),
-            capture_output=True,
-        ).stdout.strip()
+        remote_health = _wait_remote_health(args.host, args.user, password, args.token, args.port)
         _print_json({
             "host": args.host,
             "service_enabled": enabled,
             "service_active": active,
-            "remote_health": json.loads(remote_health),
+            "remote_health": remote_health,
         })
     finally:
         config_path.unlink(missing_ok=True)
@@ -327,10 +336,12 @@ def run_deploy_orange_pi(args: argparse.Namespace) -> None:
 def _prepare_remote_validation_assets(host: str, user: str, password: str, data_root: str) -> None:
     script = f"""
 from pathlib import Path
+import shutil
 
 data_root = Path({data_root!r})
 devices = data_root / "devices"
 imports = data_root / "nas-import" / "validation-suite-skill"
+shutil.rmtree(imports, ignore_errors=True)
 
 (devices / "usb-player" / "Music").mkdir(parents=True, exist_ok=True)
 (devices / "usb-recorder" / "Recordings").mkdir(parents=True, exist_ok=True)
@@ -506,6 +517,18 @@ def run_validate_orange_pi(args: argparse.Namespace) -> None:
         write_dry_body = _assert_status(_http_request("POST", base_url, args.token, "/api/v1/write-back", write_dry), 200, "write-dry-run")
         results.append({"check": "write-dry-run", "result": write_dry_body["status"]})
 
+        write_tags = _dump_model(WriteBackRequest(
+            request_id=new_request_id(),
+            device_id="usb-player",
+            target_files=["Music/song.mp3"],
+            action="write_audio_tags",
+            payload=WriteBackPayload(metadata={"title": "Skill Song", "artist": "Skill Artist", "genre": "Speech"}),
+            mode="write",
+        ))
+        write_tags_body = _assert_status(_http_request("POST", base_url, args.token, "/api/v1/write-back", write_tags), 200, "write-audio-tags")
+        _assert_result_status(write_tags_body, "success", "write-audio-tags")
+        results.append({"check": "write-audio-tags", "result": write_tags_body["status"]})
+
         write_escape = _dump_model(WriteBackRequest(
             request_id=new_request_id(),
             device_id="usb-player",
@@ -579,7 +602,7 @@ def build_parser() -> argparse.ArgumentParser:
     write_back = subparsers.add_parser("write-back", help="Call POST /api/v1/write-back")
     write_back.add_argument("device_id")
     write_back.add_argument("target_file", nargs="+")
-    write_back.add_argument("--action", required=True, choices=["write_lrc_sidecar", "write_metadata_sidecar"])
+    write_back.add_argument("--action", required=True, choices=["write_lrc_sidecar", "write_metadata_sidecar", "write_audio_tags"])
     write_back.add_argument("--content")
     write_back.add_argument("--metadata-json")
     write_back.add_argument("--base-url", default=DEFAULT_BASE_URL)

@@ -7,10 +7,11 @@ name = "media-access-station"
 version = "0.1.0"
 description = "Minimal Media Access Station MVP with local client and Pi-side server"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
+  "mutagen>=1.47,<2",
   "pydantic>=2.9,<3",
   "pyyaml>=6,<7",
   "typer>=0.16,<1",

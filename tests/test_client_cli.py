@@ -34,7 +34,9 @@ def test_scan_cli_persists_operation_log(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ['scan', '--log-root', str(tmp_path), '--token', 'x'])
     assert result.exit_code == 0
     assert 'Scanned 1 device(s)' in result.stdout
-    assert any(tmp_path.rglob('*.json'))
+    assert any((tmp_path / 'operations').rglob('*.json'))
+    assert any((tmp_path / 'responses').rglob('*.json'))
+    assert any((tmp_path / 'summaries').rglob('*.txt'))
 
 
 def test_health_cli_outputs_json(monkeypatch) -> None:
@@ -51,4 +53,4 @@ def test_health_cli_persists_operation_log(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ['health', '--token', 'x', '--log-root', str(tmp_path)])
     assert result.exit_code == 0
     assert '"log_path":' in result.stdout
-    assert any(tmp_path.rglob('*.json'))
+    assert any((tmp_path / 'operations').rglob('*.json'))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import subprocess
 
@@ -41,8 +42,11 @@ def scan_devices(config: ServerConfig, requested_roots: list[str] | None = None,
                 DeviceRecord(
                     device_id=entry.name,
                     path=str(entry.resolve()),
+                    mount_path=str(entry.resolve()),
                     label=entry.name,
                     filesystem=_detect_filesystem(entry),
+                    device_uuid=hashlib.sha1(str(entry.resolve()).encode("utf-8")).hexdigest()[:16],
+                    vendor="virtual-usb",
                     mock=False,
                     files_sample=sample,
                 )
@@ -54,7 +58,10 @@ def scan_devices(config: ServerConfig, requested_roots: list[str] | None = None,
             DeviceRecord(
                 device_id="mock-device",
                 path=str(Path(config.devices.mount_root).resolve() / "mock-device"),
+                mount_path=str(Path(config.devices.mount_root).resolve() / "mock-device"),
                 label="Mock Device",
+                device_uuid="mock-device",
+                vendor="mock",
                 mock=True,
                 files_sample=["Music/example.mp3", "Recordings/example.wav"],
             )

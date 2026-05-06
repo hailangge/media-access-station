@@ -7,7 +7,7 @@ from media_access_station.shared.utils import utc_now
 
 TaskType = Literal["health_check", "scan", "import_to_nas", "write_back"]
 ModeType = Literal["read_only", "write"]
-WriteActionType = Literal["write_lrc_sidecar", "write_metadata_sidecar"]
+WriteActionType = Literal["write_lrc_sidecar", "write_metadata_sidecar", "write_audio_tags"]
 StatusType = Literal["success", "partial", "failed"]
 
 
@@ -53,8 +53,11 @@ class WriteBackRequest(RequestBase):
 class DeviceRecord(BaseModel):
     device_id: str
     path: str
+    mount_path: str | None = None
     label: str
     filesystem: str = "mockfs"
+    device_uuid: str | None = None
+    vendor: str | None = None
     mock: bool = False
     files_sample: list[str] = Field(default_factory=list)
 

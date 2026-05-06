@@ -53,6 +53,9 @@ def test_health_and_scan(tmp_path: Path) -> None:
     assert body['status'] == 'success'
     assert len(body['result']['devices']) == 2
     assert all(device['filesystem'] != 'mockfs' for device in body['result']['devices'])
+    assert all(device['mount_path'] for device in body['result']['devices'])
+    assert all(device['device_uuid'] for device in body['result']['devices'])
+    assert all(device['vendor'] == 'virtual-usb' for device in body['result']['devices'])
 
 
 def test_scan_dry_run_reports_no_effect_warning(tmp_path: Path) -> None:
@@ -303,6 +306,49 @@ def test_write_back_dry_run_existing_target_reports_success_without_sidecar(tmp_
     assert body['status'] == 'success'
     sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'song.mp3.meta.json'
     assert not sidecar.exists()
+
+
+def test_write_back_audio_tags_success_when_enabled(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-tags',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/song.mp3'],
+        'action': 'write_audio_tags',
+        'payload': {'metadata': {'title': 'Demo Song', 'artist': 'Demo Artist', 'genre': 'Speech'}},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'success'
+    changed = body['result']['changed_count']
+    assert changed == 1
+    metadata = body['operation_log']['changed_items'][0]['metadata']
+    assert metadata['title'] == 'Demo Song'
+    assert metadata['artist'] == 'Demo Artist'
+    assert metadata['genre'] == 'Speech'
+
+
+def test_write_back_audio_tags_unsupported_file_type_is_failed(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True)
+    notes = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'notes.txt'
+    notes.write_text('plain text', encoding='utf-8')
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-tags-unsupported',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/notes.txt'],
+        'action': 'write_audio_tags',
+        'payload': {'metadata': {'genre': 'Speech'}},
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'failed'
+    assert any('Unsupported audio tag target type' in w for w in body['warnings'])
 
 
 def test_import_path_traversal_blocked(tmp_path: Path) -> None:

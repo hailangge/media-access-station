@@ -107,4 +107,5 @@ def test_scan_entrypoint_posts_request_and_persists_log(tmp_path: Path, monkeypa
     assert output["response"]["status"] == "success"
     assert stub.calls[0][0] == "/api/v1/scan"
     assert stub.calls[0][1]["dry_run"] is True
-    assert any(tmp_path.rglob("*.json"))
+    assert any((tmp_path / "operations").rglob("*.json"))
+    assert any((tmp_path / "responses").rglob("*.json"))

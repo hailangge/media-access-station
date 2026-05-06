@@ -10,6 +10,7 @@
 - [x] Run full `pytest`
 - [x] Run CLI/API smoke checks
 - [x] Package Media Access Station entrypoints as root-level skill scripts
+- [x] Re-sync implementation and skill surface with `/mnt/data/requirements/media access station`
 - [x] Final review, commit, and collect Kimi evidence
 
 ## Notes
@@ -21,3 +22,4 @@
 - 2026-04-25 remaining review minors were closed: real device filesystem labeling, clearer write-disabled messaging, persisted `health` logs, explicit `scan --dry-run` semantics, automated auth/IP/path-traversal coverage, and production path guidance.
 - 2026-05-03 deployment follow-up requires a formal Orange Pi runtime layout, production config, `systemd` boot startup, and crash auto-restart validation on `192.168.0.160`.
 - 2026-05-06 added `skill/media-access-station/` so all current service capabilities are reachable through script-based skill entrypoints.
+- 2026-05-06 re-aligned the implementation with the newer requirements source under `/mnt/data/requirements/media access station`, added MP3 tag write-back support, moved authoritative local logs to `/mnt/data/workspace-media-manager/logs/media-access-station`, and hardened Orange Pi deployment for Python 3.10 and post-restart health waiting.
