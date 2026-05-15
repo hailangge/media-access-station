@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+
+
+LSBLK_COLUMNS = "NAME,KNAME,PATH,FSTYPE,SIZE,TYPE,MOUNTPOINT,LABEL,UUID,RM,RO,HOTPLUG,MODEL,VENDOR"
+
+
+def main() -> None:
+    if len(sys.argv) != 1:
+        raise SystemExit("mas-lsblk does not accept arguments")
+    result = subprocess.run(
+        ["/usr/bin/lsblk", "-J", "-o", LSBLK_COLUMNS],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

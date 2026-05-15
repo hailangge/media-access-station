@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+
+STATE_ROOT = Path("/var/lib/media-access-station/state")
+MOUNT_ROOT = Path("/var/lib/media-access-station/devices")
+
+
+def _derive_mode(source: str) -> str | None:
+    if not source:
+        return None
+    if " ro," in f" {source}" or source.endswith(" ro") or " ro " in source:
+        return "ro"
+    if " rw," in f" {source}" or source.endswith(" rw") or " rw " in source:
+        return "rw"
+    return None
+
+
+def _readonly_message(mode: str | None, mounted: bool) -> str | None:
+    if not mounted:
+        return None
+    if mode == "ro":
+        return "Mounted read-only. Read and scan are allowed; lyric write-back and any file modification will fail until remounted as rw."
+    if mode == "rw":
+        return "Mounted read-write. With lrc_only_mode enabled on the service, only .lrc lyric sidecars are permitted for automated write-back."
+    return "Mount options were detected, but the access mode could not be classified."
+
+
+def _mount_entry(path: Path) -> dict[str, str]:
+    source = subprocess.run(
+        ["/usr/bin/findmnt", "-n", "-o", "SOURCE,FSTYPE,OPTIONS", "--mountpoint", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    mounted = bool(source)
+    mode = _derive_mode(source)
+    return {
+        "mount_path": str(path),
+        "mounted": mounted,
+        "source": source,
+        "mode": mode,
+        "message": _readonly_message(mode, mounted),
+    }
+
+
+def main() -> None:
+    if len(sys.argv) > 2:
+        raise SystemExit("usage: mas-status [MOUNT_NAME]")
+    targets: list[Path]
+    if len(sys.argv) == 2:
+        targets = [MOUNT_ROOT / sys.argv[1]]
+    else:
+        targets = sorted(path for path in MOUNT_ROOT.iterdir() if path.is_dir()) if MOUNT_ROOT.exists() else []
+    payload = {
+        "state_root": str(STATE_ROOT),
+        "mount_root": str(MOUNT_ROOT),
+        "mounts": [_mount_entry(path) for path in targets],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

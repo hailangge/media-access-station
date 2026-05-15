@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+
+SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+SAFE_DEVICE = re.compile(r"^/dev/(sd[a-z][0-9]+|mmcblk[0-9]+p[0-9]+|nvme[0-9]+n[0-9]+p[0-9]+)$")
+ALLOWED_FSTYPES = {"vfat", "exfat", "ntfs", "ext2", "ext3", "ext4", "fuseblk"}
+BLOCKED_FSTYPES = {"linux_raid_member", "LVM2_member", "crypto_LUKS"}
+STATE_ROOT = Path("/var/lib/media-access-station/state")
+MOUNT_ROOT = Path("/var/lib/media-access-station/devices")
+
+
+def _read_fstype(device_path: str) -> str:
+    result = subprocess.run(
+        ["/usr/sbin/blkid", "-o", "value", "-s", "TYPE", device_path],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _mountpoint_info(target: Path) -> str:
+    result = subprocess.run(
+        ["/usr/bin/findmnt", "-J", "--mountpoint", str(target)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+def _readonly_message(mode: str) -> str | None:
+    if mode == "ro":
+        return "Mounted read-only. Read and scan are allowed; lyric write-back and any file modification will fail until remounted as rw."
+    return None
+
+
+def main() -> None:
+    if len(sys.argv) != 4:
+        raise SystemExit("usage: mas-mount DEVICE_PATH MOUNT_NAME ro|rw")
+    device_path, mount_name, mode = sys.argv[1:]
+    if mode not in {"ro", "rw"}:
+        raise SystemExit("Only ro or rw mode is supported")
+    if not SAFE_DEVICE.match(device_path):
+        raise SystemExit(f"Unsupported device path: {device_path}")
+    if not SAFE_NAME.match(mount_name):
+        raise SystemExit(f"Unsupported mount name: {mount_name}")
+
+    fstype = _read_fstype(device_path)
+    if fstype in BLOCKED_FSTYPES:
+        raise SystemExit(f"Blocked filesystem type: {fstype}")
+    if fstype not in ALLOWED_FSTYPES:
+        raise SystemExit(f"Unsupported filesystem type: {fstype}")
+
+    target = MOUNT_ROOT / mount_name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.mkdir(parents=True, exist_ok=True)
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+
+    existing = subprocess.run(
+        ["/usr/bin/findmnt", "-n", "-o", "SOURCE", "--mountpoint", str(target)],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if existing and existing != "/dev/mmcblk1p1":
+        print(json.dumps({
+            "status": "already-mounted",
+            "device_path": device_path,
+            "mount_name": mount_name,
+            "mount_path": str(target),
+            "existing_source": existing,
+            "fstype": fstype,
+        }, ensure_ascii=False, indent=2))
+        return
+
+    subprocess.run(
+        [
+            "/usr/bin/mount",
+            "-o",
+            "ro,nodev,nosuid,noexec" if mode == "ro" else "rw,nodev,nosuid,noexec",
+            "-t",
+            fstype,
+            device_path,
+            str(target),
+        ],
+        check=True,
+    )
+
+    state_path = STATE_ROOT / f"{mount_name}.json"
+    state_path.write_text(json.dumps({
+        "device_path": device_path,
+        "mount_name": mount_name,
+        "mount_path": str(target),
+        "mode": mode,
+        "fstype": fstype,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({
+        "status": "mounted",
+        "device_path": device_path,
+        "mount_name": mount_name,
+        "mount_path": str(target),
+        "mode": mode,
+        "fstype": fstype,
+        "mount_info": _mountpoint_info(target),
+        "message": _readonly_message(mode),
+    }, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

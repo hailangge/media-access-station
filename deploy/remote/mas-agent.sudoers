@@ -1,0 +1,6 @@
+Defaults!/usr/local/libexec/mas/mas-lsblk secure_path=/usr/sbin:/usr/bin:/sbin:/bin
+Defaults!/usr/local/libexec/mas/mas-mount secure_path=/usr/sbin:/usr/bin:/sbin:/bin
+Defaults!/usr/local/libexec/mas/mas-umount secure_path=/usr/sbin:/usr/bin:/sbin:/bin
+Defaults!/usr/local/libexec/mas/mas-status secure_path=/usr/sbin:/usr/bin:/sbin:/bin
+
+mas-agent ALL=(root) NOPASSWD: /usr/local/libexec/mas/mas-lsblk, /usr/local/libexec/mas/mas-mount, /usr/local/libexec/mas/mas-umount, /usr/local/libexec/mas/mas-status

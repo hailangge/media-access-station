@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+import shlex
+import subprocess
+import sys
+
+
+COMMAND_MAP = {
+    "lsblk": ["/usr/bin/sudo", "/usr/local/libexec/mas/mas-lsblk"],
+    "mount": ["/usr/bin/sudo", "/usr/local/libexec/mas/mas-mount"],
+    "umount": ["/usr/bin/sudo", "/usr/local/libexec/mas/mas-umount"],
+    "status": ["/usr/bin/sudo", "/usr/local/libexec/mas/mas-status"],
+}
+
+
+def _parse_original_command() -> list[str]:
+    original = os.environ.get("SSH_ORIGINAL_COMMAND", "").strip()
+    if not original:
+        raise SystemExit("No command provided")
+    parts = shlex.split(original)
+    if not parts:
+        raise SystemExit("No command provided")
+    return parts
+
+
+def main() -> None:
+    parts = _parse_original_command()
+    command = parts[0]
+    base = COMMAND_MAP.get(command)
+    if base is None:
+        raise SystemExit(f"Unsupported command: {command}")
+    subprocess.run(base + parts[1:], check=True)
+
+
+if __name__ == "__main__":
+    main()
