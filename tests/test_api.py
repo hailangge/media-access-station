@@ -8,7 +8,7 @@ from media_access_station.server.app import create_app
 from media_access_station.shared.config import ServerConfig
 
 
-def make_config(tmp_path: Path, write_enabled: bool = False) -> ServerConfig:
+def make_config(tmp_path: Path, write_enabled: bool = False, lrc_only_mode: bool = False) -> ServerConfig:
     devices_root = tmp_path / 'devices'
     recorder = devices_root / 'test-recorder' / 'Recordings'
     player = devices_root / 'test-player' / 'Music'
@@ -21,6 +21,7 @@ def make_config(tmp_path: Path, write_enabled: bool = False) -> ServerConfig:
             'auth_token': 'test-token',
             'client_ip_allowlist': ['testclient'],
             'write_enabled': write_enabled,
+            'lrc_only_mode': lrc_only_mode,
         },
         'nas': {
             'address': 'nas.test',
@@ -245,6 +246,54 @@ def test_write_back_success_when_enabled(tmp_path: Path) -> None:
     assert body['status'] == 'success'
     sidecar = Path(config.devices.mount_root) / 'test-player' / 'Music' / 'song.lrc'
     assert sidecar.read_text(encoding='utf-8') == 'lyric line'
+
+
+def test_write_back_lrc_only_mode_blocks_metadata_sidecar(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True, lrc_only_mode=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-lrc-only-meta',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/song.mp3'],
+        'action': 'write_metadata_sidecar',
+        'payload': {'metadata': {'title': 'demo'}},
+    })
+    assert response.status_code == 403
+    assert 'lrc_only_mode' in response.json()['detail']
+
+
+def test_write_back_lrc_only_mode_blocks_audio_tags(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True, lrc_only_mode=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-lrc-only-tags',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/song.mp3'],
+        'action': 'write_audio_tags',
+        'payload': {'metadata': {'genre': 'Speech'}},
+    })
+    assert response.status_code == 403
+    assert 'lrc_only_mode' in response.json()['detail']
+
+
+def test_write_back_lrc_only_mode_allows_lrc_sidecar(tmp_path: Path) -> None:
+    config = make_config(tmp_path, write_enabled=True, lrc_only_mode=True)
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/write-back', headers=auth_headers(), json={
+        'request_id': 'req-write-lrc-only-lrc',
+        'task_type': 'write_back',
+        'mode': 'write',
+        'device_id': 'test-player',
+        'target_files': ['Music/song.mp3'],
+        'action': 'write_lrc_sidecar',
+        'payload': {'content': 'lyric line'},
+    })
+    assert response.status_code == 200
+    assert response.json()['status'] == 'success'
 
 
 def test_write_back_failed_when_target_file_missing(tmp_path: Path) -> None:

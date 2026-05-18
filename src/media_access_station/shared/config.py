@@ -14,6 +14,7 @@ class SecuritySettings(BaseModel):
     auth_token: str = "change-me"
     client_ip_allowlist: list[str] = Field(default_factory=lambda: ["127.0.0.1"])
     write_enabled: bool = False
+    lrc_only_mode: bool = False
 
 
 class NASSettings(BaseModel):

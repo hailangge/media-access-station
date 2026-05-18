@@ -29,6 +29,7 @@ def create_app(config: ServerConfig) -> FastAPI:
             "status": "ok",
             "service": "media-access-station",
             "write_enabled": config.security.write_enabled,
+            "lrc_only_mode": config.security.lrc_only_mode,
             "nas_address": config.nas.address,
             "timestamp": utc_now(),
         }

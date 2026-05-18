@@ -98,6 +98,8 @@ def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[
         raise PermissionError("Server write operations are disabled in config")
     if request.mode != "write":
         raise PermissionError("Request mode must be 'write' for write-back")
+    if config.security.lrc_only_mode and request.action != "write_lrc_sidecar":
+        raise PermissionError("Server is in lrc_only_mode; only write_lrc_sidecar is allowed")
 
     warnings: list[str] = []
     changes: list[dict] = []
@@ -120,6 +122,9 @@ def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[
             sidecar.write_text(request.payload.content or "", encoding='utf-8')
             changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action})
         elif request.action == "write_metadata_sidecar":
+            if config.security.lrc_only_mode:
+                warnings.append("Skipped write_metadata_sidecar because lrc_only_mode is enabled")
+                continue
             sidecar = target.with_suffix(target.suffix + '.meta.json')
             if request.dry_run:
                 changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action, "dry_run": True})
@@ -128,6 +133,9 @@ def execute_writeback(request: WriteBackRequest, config: ServerConfig) -> tuple[
             sidecar.write_text(json.dumps(request.payload.metadata, ensure_ascii=False, indent=2), encoding='utf-8')
             changes.append({"target": str(target), "sidecar": str(sidecar), "action": request.action})
         elif request.action == "write_audio_tags":
+            if config.security.lrc_only_mode:
+                warnings.append("Skipped write_audio_tags because lrc_only_mode is enabled")
+                continue
             try:
                 result = _write_audio_tags(target, request.payload.metadata, request.dry_run)
             except ValueError as exc:

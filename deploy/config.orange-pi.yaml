@@ -9,6 +9,7 @@ security:
     - 127.0.0.1
     - replace-with-admin-client-ip
   write_enabled: false
+  lrc_only_mode: false
 nas:
   address: 192.168.0.160
   import_root: /var/lib/media-access-station/nas-import

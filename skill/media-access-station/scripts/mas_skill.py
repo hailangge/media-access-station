@@ -28,12 +28,13 @@ from media_access_station.shared.utils import new_request_id
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
 DEFAULT_LOG_ROOT = "/mnt/data/workspace-media-manager/logs/media-access-station"
 DEFAULT_REMOTE_HOST = "192.168.0.160"
-DEFAULT_REMOTE_USER = "root"
+DEFAULT_REMOTE_USER = "mas-agent"
 DEFAULT_REMOTE_PORT = 8765
 DEFAULT_REMOTE_APP_DIR = "/opt/media-access-station/current"
 DEFAULT_REMOTE_CONFIG = "/etc/media-access-station/config.yaml"
 DEFAULT_REMOTE_SERVICE = "/etc/systemd/system/media-access-station.service"
 DEFAULT_REMOTE_DATA_ROOT = "/var/lib/media-access-station"
+DEFAULT_REMOTE_SSH_KEY = "/home/massena/.ssh/media_access"
 
 
 def _client(base_url: str, token: str) -> MASClient:
@@ -81,6 +82,11 @@ def _run(
     )
 
 
+def _run_json(command: list[str]) -> dict[str, Any]:
+    result = _run(command, capture_output=True)
+    return json.loads(result.stdout)
+
+
 def _ssh_prefix(host: str, user: str, password: str) -> list[str]:
     return [
         "sshpass",
@@ -104,6 +110,17 @@ def _scp_prefix(password: str) -> list[str]:
     ]
 
 
+def _key_ssh_prefix(host: str, user: str, identity_file: str) -> list[str]:
+    return [
+        "ssh",
+        "-i",
+        identity_file,
+        "-o",
+        "StrictHostKeyChecking=no",
+        f"{user}@{host}",
+    ]
+
+
 def _ssh(host: str, user: str, password: str, command: str, *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
     return _run(_ssh_prefix(host, user, password) + [command], capture_output=capture_output)
 
@@ -114,6 +131,10 @@ def _scp_to(host: str, user: str, password: str, local_path: Path, remote_path: 
 
 def _scp_from(host: str, user: str, password: str, remote_path: str, local_path: Path) -> None:
     _run(_scp_prefix(password) + [f"{user}@{host}:{remote_path}", str(local_path)])
+
+
+def _ssh_key(host: str, user: str, identity_file: str, command: str, *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+    return _run(_key_ssh_prefix(host, user, identity_file) + [command], capture_output=capture_output)
 
 
 def _rsync_repo(host: str, user: str, password: str, remote_app_dir: str) -> None:
@@ -183,11 +204,13 @@ def build_orange_pi_config(
     admin_ip: str,
     nas_address: str,
     write_enabled: bool,
+    lrc_only_mode: bool = False,
 ) -> dict[str, Any]:
     data = yaml.safe_load(template_path.read_text(encoding="utf-8")) or {}
     data["security"]["auth_token"] = token
     data["security"]["client_ip_allowlist"] = ["127.0.0.1", admin_ip]
     data["security"]["write_enabled"] = write_enabled
+    data["security"]["lrc_only_mode"] = lrc_only_mode
     data["nas"]["address"] = nas_address
     return data
 
@@ -254,6 +277,109 @@ def run_write_back(args: argparse.Namespace) -> None:
     _print_json({"request": payload, "response": response, "log_path": str(log_path)})
 
 
+def _remote_command_json(host: str, user: str, identity_file: str, command: str) -> dict[str, Any]:
+    result = _ssh_key(host, user, identity_file, command, capture_output=True)
+    return json.loads(result.stdout)
+
+
+def run_setup_restricted_ssh(args: argparse.Namespace) -> None:
+    password = _require_password(args.password)
+    public_key = Path(args.public_key).read_text(encoding="utf-8").strip()
+    remote_dir = REPO_ROOT / "deploy" / "remote"
+    staged_files = [
+        "mas-ssh-dispatch",
+        "mas-lsblk",
+        "mas-mount",
+        "mas-status",
+        "mas-umount",
+        "mas-agent.sudoers",
+    ]
+
+    _ssh(
+        args.host,
+        args.bootstrap_user,
+        password,
+        (
+            "id -u mas-agent >/dev/null 2>&1 || useradd -m -s /bin/bash mas-agent; "
+            "mkdir -p /home/mas-agent/.ssh /usr/local/libexec/mas /var/lib/media-access-station/state; "
+            "chown -R mas-agent:mas-agent /home/mas-agent/.ssh; "
+            "chmod 700 /home/mas-agent/.ssh"
+        ),
+    )
+
+    for filename in staged_files:
+        _scp_to(args.host, args.bootstrap_user, password, remote_dir / filename, f"/tmp/{filename}")
+
+    dispatch_entry = (
+        f'command="/usr/local/libexec/mas/mas-ssh-dispatch",no-port-forwarding,no-X11-forwarding,'
+        f'no-agent-forwarding,no-pty {public_key}\n'
+    )
+    _ssh(
+        args.host,
+        args.bootstrap_user,
+        password,
+        (
+            "install -m 0755 /tmp/mas-ssh-dispatch /usr/local/libexec/mas/mas-ssh-dispatch && "
+            "install -m 0755 /tmp/mas-lsblk /usr/local/libexec/mas/mas-lsblk && "
+            "install -m 0755 /tmp/mas-mount /usr/local/libexec/mas/mas-mount && "
+            "install -m 0755 /tmp/mas-status /usr/local/libexec/mas/mas-status && "
+            "install -m 0755 /tmp/mas-umount /usr/local/libexec/mas/mas-umount && "
+            "install -m 0440 /tmp/mas-agent.sudoers /etc/sudoers.d/mas-agent && "
+            "printf %s "
+            + shlex.quote(dispatch_entry)
+            + " > /home/mas-agent/.ssh/authorized_keys && "
+            "chown mas-agent:mas-agent /home/mas-agent/.ssh/authorized_keys && "
+            "chmod 600 /home/mas-agent/.ssh/authorized_keys && "
+            "truncate -s 0 /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+        ),
+    )
+    _print_json({
+        "host": args.host,
+        "ssh_user": "mas-agent",
+        "identity_file": args.identity_file,
+        "root_authorized_keys_cleared": True,
+        "installed_commands": ["lsblk", "mount", "status", "umount"],
+    })
+
+
+def run_remote_lsblk(args: argparse.Namespace) -> None:
+    payload = _remote_command_json(args.host, args.user, args.identity_file, "lsblk")
+    _print_json(payload)
+
+
+def run_remote_mount(args: argparse.Namespace) -> None:
+    payload = _remote_command_json(
+        args.host,
+        args.user,
+        args.identity_file,
+        " ".join([
+            "mount",
+            shlex.quote(args.device_path),
+            shlex.quote(args.mount_name),
+            args.mode,
+        ]),
+    )
+    _print_json(payload)
+
+
+def run_remote_status(args: argparse.Namespace) -> None:
+    command = "status"
+    if args.mount_name:
+        command = f"status {shlex.quote(args.mount_name)}"
+    payload = _remote_command_json(args.host, args.user, args.identity_file, command)
+    _print_json(payload)
+
+
+def run_remote_umount(args: argparse.Namespace) -> None:
+    payload = _remote_command_json(
+        args.host,
+        args.user,
+        args.identity_file,
+        f"umount {shlex.quote(args.mount_name)}",
+    )
+    _print_json(payload)
+
+
 def _set_remote_write_enabled(
     host: str,
     user: str,
@@ -274,6 +400,26 @@ path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     _ssh(host, user, password, "systemctl restart media-access-station.service")
 
 
+def _set_remote_lrc_only_mode(
+    host: str,
+    user: str,
+    password: str,
+    config_path: str,
+    enabled: bool,
+) -> None:
+    script = f"""
+from pathlib import Path
+import yaml
+
+path = Path({config_path!r})
+data = yaml.safe_load(path.read_text()) or {{}}
+data.setdefault("security", {{}})["lrc_only_mode"] = {str(enabled)}
+path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+"""
+    _remote_python(host, user, password, script)
+    _ssh(host, user, password, "systemctl restart media-access-station.service")
+
+
 def run_deploy_orange_pi(args: argparse.Namespace) -> None:
     password = _require_password(args.password)
     template_path = REPO_ROOT / "deploy" / "config.orange-pi.yaml"
@@ -283,6 +429,7 @@ def run_deploy_orange_pi(args: argparse.Namespace) -> None:
         admin_ip=args.admin_ip,
         nas_address=args.host,
         write_enabled=args.write_enabled,
+        lrc_only_mode=args.lrc_only_mode,
     )
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as config_file:
         yaml.safe_dump(config_data, config_file, sort_keys=False)
@@ -468,6 +615,7 @@ def run_validate_orange_pi(args: argparse.Namespace) -> None:
         results.append({"check": "write-back-disabled", "result": "403"})
 
         _set_remote_write_enabled(args.host, args.user, password, args.remote_config, True)
+        _set_remote_lrc_only_mode(args.host, args.user, password, args.remote_config, False)
 
         write_success = _dump_model(WriteBackRequest(
             request_id=new_request_id(),
@@ -611,14 +759,52 @@ def build_parser() -> argparse.ArgumentParser:
     write_back.add_argument("--dry-run", action="store_true")
     write_back.set_defaults(func=run_write_back)
 
+    setup_ssh = subparsers.add_parser("setup-restricted-ssh", help="Install restricted remote SSH tooling on the Orange Pi")
+    setup_ssh.add_argument("--host", default=DEFAULT_REMOTE_HOST)
+    setup_ssh.add_argument("--bootstrap-user", default="root")
+    setup_ssh.add_argument("--password")
+    setup_ssh.add_argument("--identity-file", default=DEFAULT_REMOTE_SSH_KEY)
+    setup_ssh.add_argument("--public-key", default=f"{DEFAULT_REMOTE_SSH_KEY}.pub")
+    setup_ssh.set_defaults(func=run_setup_restricted_ssh)
+
+    remote_lsblk = subparsers.add_parser("remote-lsblk", help="Run restricted remote lsblk over SSH")
+    remote_lsblk.add_argument("--host", default=DEFAULT_REMOTE_HOST)
+    remote_lsblk.add_argument("--user", default=DEFAULT_REMOTE_USER)
+    remote_lsblk.add_argument("--identity-file", default=DEFAULT_REMOTE_SSH_KEY)
+    remote_lsblk.set_defaults(func=run_remote_lsblk)
+
+    remote_mount = subparsers.add_parser("remote-mount", help="Run restricted remote mount over SSH")
+    remote_mount.add_argument("device_path")
+    remote_mount.add_argument("mount_name")
+    remote_mount.add_argument("--mode", default="ro", choices=["ro", "rw"])
+    remote_mount.add_argument("--host", default=DEFAULT_REMOTE_HOST)
+    remote_mount.add_argument("--user", default=DEFAULT_REMOTE_USER)
+    remote_mount.add_argument("--identity-file", default=DEFAULT_REMOTE_SSH_KEY)
+    remote_mount.set_defaults(func=run_remote_mount)
+
+    remote_status = subparsers.add_parser("remote-status", help="Inspect restricted remote mount state over SSH")
+    remote_status.add_argument("mount_name", nargs="?")
+    remote_status.add_argument("--host", default=DEFAULT_REMOTE_HOST)
+    remote_status.add_argument("--user", default=DEFAULT_REMOTE_USER)
+    remote_status.add_argument("--identity-file", default=DEFAULT_REMOTE_SSH_KEY)
+    remote_status.set_defaults(func=run_remote_status)
+
+    remote_umount = subparsers.add_parser("remote-umount", help="Run restricted remote umount over SSH")
+    remote_umount.add_argument("mount_name")
+    remote_umount.add_argument("--host", default=DEFAULT_REMOTE_HOST)
+    remote_umount.add_argument("--user", default=DEFAULT_REMOTE_USER)
+    remote_umount.add_argument("--identity-file", default=DEFAULT_REMOTE_SSH_KEY)
+    remote_umount.set_defaults(func=run_remote_umount)
+
     deploy = subparsers.add_parser("deploy-orange-pi", help="Deploy the project to an Orange Pi host")
     deploy.add_argument("--host", default=DEFAULT_REMOTE_HOST)
-    deploy.add_argument("--user", default=DEFAULT_REMOTE_USER)
+    deploy.add_argument("--user", default="root")
     deploy.add_argument("--password")
     deploy.add_argument("--token", required=True)
     deploy.add_argument("--admin-ip", required=True)
     deploy.add_argument("--port", type=int, default=DEFAULT_REMOTE_PORT)
     deploy.add_argument("--write-enabled", action="store_true")
+    deploy.add_argument("--lrc-only-mode", action="store_true")
     deploy.add_argument("--remote-app-dir", default=DEFAULT_REMOTE_APP_DIR)
     deploy.add_argument("--remote-config", default=DEFAULT_REMOTE_CONFIG)
     deploy.add_argument("--remote-service", default=DEFAULT_REMOTE_SERVICE)
@@ -627,7 +813,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = subparsers.add_parser("validate-orange-pi", help="Run end-to-end validation against the Orange Pi service")
     validate.add_argument("--host", default=DEFAULT_REMOTE_HOST)
-    validate.add_argument("--user", default=DEFAULT_REMOTE_USER)
+    validate.add_argument("--user", default="root")
     validate.add_argument("--password")
     validate.add_argument("--token", required=True)
     validate.add_argument("--base-url")

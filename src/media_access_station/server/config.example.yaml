@@ -9,6 +9,7 @@ security:
     - 127.0.0.1
     - testclient
   write_enabled: false
+  lrc_only_mode: false
 nas:
   address: nas.local
   import_root: ./var/nas-import
