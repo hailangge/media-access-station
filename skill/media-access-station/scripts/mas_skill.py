@@ -22,7 +22,7 @@ if str(SRC_ROOT) not in sys.path:
 from media_access_station.client.api_client import MASClient
 from media_access_station.client.operation_log import persist_operation_log
 from media_access_station.shared.config import ServerConfig
-from media_access_station.shared.schemas import HealthRequest, ImportRequest, ScanRequest, WriteBackPayload, WriteBackRequest
+from media_access_station.shared.schemas import HealthRequest, ImportRequest, LyricsAlignRequest, ScanRequest, WriteBackPayload, WriteBackRequest
 from media_access_station.shared.utils import new_request_id
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
@@ -274,6 +274,20 @@ def run_write_back(args: argparse.Namespace) -> None:
     ))
     response = _client(args.base_url, args.token).post("/api/v1/write-back", payload)
     log_path = _persist(args.log_root, "/api/v1/write-back", payload, response)
+    _print_json({"request": payload, "response": response, "log_path": str(log_path)})
+
+
+def run_lyrics_align(args: argparse.Namespace) -> None:
+    payload = _dump_model(LyricsAlignRequest(
+        request_id=new_request_id(),
+        device_id=args.device_id,
+        server_audio_paths=args.server_audio_path,
+        server_lrc_paths=args.server_lrc_path,
+        report_format=args.report_format,
+        force=args.force,
+    ))
+    response = _client(args.base_url, args.token).post("/api/v1/lyrics/align", payload)
+    log_path = _persist(args.log_root, "/api/v1/lyrics/align", payload, response)
     _print_json({"request": payload, "response": response, "log_path": str(log_path)})
 
 
@@ -758,6 +772,17 @@ def build_parser() -> argparse.ArgumentParser:
     write_back.add_argument("--log-root", default=DEFAULT_LOG_ROOT)
     write_back.add_argument("--dry-run", action="store_true")
     write_back.set_defaults(func=run_write_back)
+
+    lyrics_align = subparsers.add_parser("lyrics-align", help="Call POST /api/v1/lyrics/align on the media server")
+    lyrics_align.add_argument("--device-id")
+    lyrics_align.add_argument("--server-audio-path", action="append", default=[])
+    lyrics_align.add_argument("--server-lrc-path", action="append", default=[])
+    lyrics_align.add_argument("--report-format", default="csv", choices=["csv", "markdown", "both"])
+    lyrics_align.add_argument("--force", action="store_true")
+    lyrics_align.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    lyrics_align.add_argument("--token", default="change-me")
+    lyrics_align.add_argument("--log-root", default=DEFAULT_LOG_ROOT)
+    lyrics_align.set_defaults(func=run_lyrics_align)
 
     setup_ssh = subparsers.add_parser("setup-restricted-ssh", help="Install restricted remote SSH tooling on the Orange Pi")
     setup_ssh.add_argument("--host", default=DEFAULT_REMOTE_HOST)

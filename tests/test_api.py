@@ -430,3 +430,27 @@ def test_write_back_path_traversal_blocked(tmp_path: Path) -> None:
     })
     assert response.status_code == 400
     assert 'escapes root' in response.json()['detail']
+
+
+def test_lyrics_align_returns_gpu_unavailable_with_report(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config.operations.service_log_dir = str(tmp_path / 'service-logs')
+    client = TestClient(create_app(config))
+    response = client.post('/api/v1/lyrics/align', headers=auth_headers(), json={
+        'request_id': 'req-align-no-gpu',
+        'task_type': 'lyrics_align',
+        'mode': 'read_only',
+        'server_audio_paths': ['/mnt/media/music/song.flac'],
+        'server_lrc_paths': ['/mnt/media/music/song.lrc'],
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'failed'
+    assert body['result']['code'] == 'gpu_unavailable'
+    assert body['operation_log']['task_type'] == 'lyrics_align'
+    assert body['operation_log']['target_paths'] == ['/mnt/media/music/song.flac', '/mnt/media/music/song.lrc']
+    report_csv = Path(body['result']['report_csv_path'])
+    assert report_csv.exists()
+    report_text = report_csv.read_text(encoding='utf-8')
+    assert 'server_audio_path' in report_text
+    assert '/mnt/media/music/song.flac' in report_text

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from media_access_station.shared.utils import utc_now
 
-TaskType = Literal["health_check", "scan", "import_to_nas", "write_back"]
+TaskType = Literal["health_check", "scan", "import_to_nas", "write_back", "lyrics_align"]
 ModeType = Literal["read_only", "write"]
 WriteActionType = Literal["write_lrc_sidecar", "write_metadata_sidecar", "write_audio_tags"]
 StatusType = Literal["success", "partial", "failed"]
@@ -48,6 +48,15 @@ class WriteBackRequest(RequestBase):
     target_files: list[str]
     action: WriteActionType
     payload: WriteBackPayload = Field(default_factory=WriteBackPayload)
+
+
+class LyricsAlignRequest(RequestBase):
+    task_type: Literal["lyrics_align"] = "lyrics_align"
+    device_id: str | None = None
+    server_audio_paths: list[str] = Field(default_factory=list)
+    server_lrc_paths: list[str] = Field(default_factory=list)
+    report_format: Literal["csv", "markdown", "both"] = "csv"
+    force: bool = False
 
 
 class DeviceRecord(BaseModel):

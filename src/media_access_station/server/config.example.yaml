@@ -30,3 +30,7 @@ devices:
 operations:
   service_log_dir: ./var/service-logs
   temp_dir: ./var/tmp
+lyrics_alignment:
+  enabled: true
+  require_cuda: true
+  runner_command: []

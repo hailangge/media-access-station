@@ -1,6 +1,6 @@
 ---
 name: media-access-station
-description: Use this skill when you need direct command entrypoints for Media Access Station operations. It provides explicit command templates for service startup, health, scan, import, lyrics write-back, metadata sidecar write-back, audio tag write-back, restricted Orange Pi SSH setup, restricted remote lsblk or mount calls, Orange Pi deployment, and Orange Pi validation.
+description: Use this skill when you need direct command entrypoints for Media Access Station operations. It provides explicit command templates for service startup, health, scan, import, lyrics write-back, metadata sidecar write-back, audio tag write-back, lyrics alignment on a GPU media server, restricted Orange Pi SSH setup, restricted remote lsblk or mount calls, Orange Pi deployment, and Orange Pi validation.
 ---
 
 # Media Access Station
@@ -135,6 +135,18 @@ Current supported target types:
 - `.mp3`
 Blocked when:
 - the server is running with `lrc_only_mode: true`
+
+
+### 7.5. Align lyrics on a GPU media server
+Command:
+```bash
+skill/media-access-station/scripts/lyrics-align --server-audio-path /mnt/media/music/song.flac --server-lrc-path /mnt/media/music/song.lrc --base-url http://192.168.0.200:8765 --token stage1-token
+```
+Behavior:
+- the media server only sees and reports server-local paths,
+- the caller is responsible for any local/NAS/client path mapping after reading the report,
+- if the target server has no CUDA-capable GPU or no configured runner, the endpoint returns a structured failed response instead of attempting fallback processing.
+Returned report paths use service-local absolute paths such as `/var/lib/media-access-station/service-logs/lyrics-alignment/<request_id>.csv`.
 
 ### 8. Deploy to Orange Pi
 Command:

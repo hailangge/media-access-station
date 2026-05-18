@@ -30,3 +30,7 @@ devices:
 operations:
   service_log_dir: /var/lib/media-access-station/service-logs
   temp_dir: /var/lib/media-access-station/tmp
+lyrics_alignment:
+  enabled: true
+  require_cuda: true
+  runner_command: []

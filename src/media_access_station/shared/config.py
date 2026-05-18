@@ -45,6 +45,12 @@ class OperationSettings(BaseModel):
     temp_dir: str = "./var/tmp"
 
 
+class LyricsAlignmentSettings(BaseModel):
+    enabled: bool = True
+    require_cuda: bool = True
+    runner_command: list[str] = Field(default_factory=list)
+
+
 class ServerConfig(BaseModel):
     server: ServerSettings = Field(default_factory=ServerSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
@@ -52,6 +58,7 @@ class ServerConfig(BaseModel):
     transport: TransportSettings = Field(default_factory=TransportSettings)
     devices: DeviceSettings = Field(default_factory=DeviceSettings)
     operations: OperationSettings = Field(default_factory=OperationSettings)
+    lyrics_alignment: LyricsAlignmentSettings = Field(default_factory=LyricsAlignmentSettings)
 
     @classmethod
     def load(cls, path: str | Path) -> "ServerConfig":

@@ -7,10 +7,10 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request
 
 from media_access_station.shared.config import ServerConfig
-from media_access_station.shared.schemas import HealthRequest, ImportRequest, ResponseEnvelope, ScanRequest, WriteBackRequest
+from media_access_station.shared.schemas import HealthRequest, ImportRequest, LyricsAlignRequest, ResponseEnvelope, ScanRequest, WriteBackRequest
 from media_access_station.shared.utils import utc_now
 from media_access_station.server.security import verify_request
-from media_access_station.server.service import handle_import, handle_scan, handle_writeback
+from media_access_station.server.service import handle_import, handle_lyrics_alignment, handle_scan, handle_writeback
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.example.yaml")
 
@@ -51,6 +51,13 @@ def create_app(config: ServerConfig) -> FastAPI:
             return handle_writeback(payload, config)
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/v1/lyrics/align", response_model=ResponseEnvelope)
+    def lyrics_align_endpoint(payload: LyricsAlignRequest, _: ServerConfig = Depends(guarded)) -> ResponseEnvelope:
+        try:
+            return handle_lyrics_alignment(payload, config)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

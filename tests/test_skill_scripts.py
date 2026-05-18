@@ -39,6 +39,7 @@ def test_skill_parser_exposes_all_entrypoints() -> None:
         "scan",
         "import-to-nas",
         "write-back",
+        "lyrics-align",
         "setup-restricted-ssh",
         "remote-lsblk",
         "remote-mount",
@@ -208,3 +209,42 @@ def test_remote_helper_templates_exist() -> None:
         "mas-agent.sudoers",
     }
     assert expected.issubset({path.name for path in remote_dir.iterdir()})
+
+
+def test_lyrics_align_entrypoint_posts_server_paths(tmp_path: Path, monkeypatch, capsys) -> None:
+    stub = StubClient(
+        {
+            "status": "failed",
+            "summary": "Lyrics alignment requires CUDA GPU on this media server",
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "completed_at": "2026-01-01T00:00:01+00:00",
+            "warnings": [],
+            "errors": ["Lyrics alignment requires CUDA GPU on this media server"],
+            "result": {"code": "gpu_unavailable"},
+            "operation_log": {
+                "request_id": "x",
+                "task_type": "lyrics_align",
+                "status": "failed",
+                "server_timestamp": "2026-01-01T00:00:00+00:00",
+                "actions": ["lyrics_align"],
+                "target_paths": [],
+                "changed_items": [],
+                "warnings": [],
+                "errors": [],
+                "details": {},
+            },
+        }
+    )
+    monkeypatch.setattr(mas_skill, "_client", lambda base_url, token: stub)
+    mas_skill.main([
+        "lyrics-align",
+        "--token", "x",
+        "--log-root", str(tmp_path),
+        "--server-audio-path", "/mnt/media/music/song.flac",
+        "--server-lrc-path", "/mnt/media/music/song.lrc",
+    ])
+    output = json.loads(capsys.readouterr().out)
+    assert output["response"]["result"]["code"] == "gpu_unavailable"
+    assert stub.calls[0][0] == "/api/v1/lyrics/align"
+    assert stub.calls[0][1]["server_audio_paths"] == ["/mnt/media/music/song.flac"]
+    assert stub.calls[0][1]["server_lrc_paths"] == ["/mnt/media/music/song.lrc"]

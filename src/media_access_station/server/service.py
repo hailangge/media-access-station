@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from media_access_station.shared.config import ServerConfig
-from media_access_station.shared.schemas import ImportRequest, OperationLog, ResponseEnvelope, ScanRequest, WriteBackRequest
+from media_access_station.shared.schemas import ImportRequest, LyricsAlignRequest, OperationLog, ResponseEnvelope, ScanRequest, WriteBackRequest
 from media_access_station.shared.utils import derive_status, utc_now
 from media_access_station.server.device_scan import scan_devices
 from media_access_station.server.importer import execute_import
+from media_access_station.server.lyrics_alignment import execute_lyrics_alignment
 from media_access_station.server.writeback import execute_writeback
 
 
@@ -83,6 +84,36 @@ def handle_writeback(request: WriteBackRequest, config: ServerConfig) -> Respons
         completed_at=utc_now(),
         summary=f"Write-back completed for {len(changed)} target(s)",
         warnings=warnings,
+        result=result,
+        operation_log=operation_log,
+    )
+
+
+def handle_lyrics_alignment(request: LyricsAlignRequest, config: ServerConfig) -> ResponseEnvelope:
+    started = utc_now()
+    result, warnings, changed, errors = execute_lyrics_alignment(request, config)
+    status = "success" if not warnings and not errors and changed else "partial" if changed else "failed"
+    target_paths = [*request.server_audio_paths, *request.server_lrc_paths]
+    operation_log = OperationLog(
+        request_id=request.request_id,
+        task_type=request.task_type,
+        status=status,
+        target_device=request.device_id,
+        target_paths=target_paths,
+        actions=["lyrics_align"],
+        changed_items=changed,
+        warnings=warnings,
+        errors=errors,
+        details=result,
+    )
+    return ResponseEnvelope(
+        request_id=request.request_id,
+        status=status,
+        started_at=started,
+        completed_at=utc_now(),
+        summary=result.get("message", "Lyrics alignment processed"),
+        warnings=warnings,
+        errors=errors,
         result=result,
         operation_log=operation_log,
     )
